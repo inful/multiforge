@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -181,22 +182,10 @@ func RetryAfterFromHeader(h http.Header) time.Duration {
 	return 0
 }
 
-// parseSeconds is a small helper around strconv.Atoi that returns a
-// non-nil error for non-numeric strings so the caller can fall back to
-// HTTP-date parsing. (Using Atoi directly would also return an error
-// for empty strings — we want the same semantics — but we keep this as
-// a single-line seam in case we ever want to support fractional
-// seconds.)
+// parseSeconds is a thin wrapper around strconv.Atoi so the caller
+// can fall back to HTTP-date parsing when the value isn't a number.
 func parseSeconds(v string) (int, error) {
-	// Importing strconv just for this is fine; net/http's ParseTime
-	// also imports it. Keeping parseSeconds unexported so callers
-	// don't depend on its signature.
-	var n int
-	_, err := fmt.Sscanf(v, "%d", &n)
-	if err != nil {
-		return 0, err
-	}
-	return n, nil
+	return strconv.Atoi(v)
 }
 
 // capRetryAfter clamps d at the [0, MaxRetryAfter] range. Negative

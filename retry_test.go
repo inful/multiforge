@@ -21,7 +21,7 @@ func TestWithRetry_RetriesTransient(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`[{"id":1,"name":"r","full_name":"u/r","default_branch":"main","owner":{"login":"u","type":"User"}}]`))
+		_, _ = w.Write([]byte(`[{"id":1,"name":"r","full_name":"u/r","default_branch":"main","owner":{"login":"u","type":"User"}}]`))
 	}))
 	defer srv.Close()
 
@@ -181,7 +181,7 @@ func TestWithRetry_RespectsServerRetryAfter(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`[]`))
+		_, _ = w.Write([]byte(`[]`))
 	}))
 	defer srv.Close()
 

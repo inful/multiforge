@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 )
@@ -147,15 +146,4 @@ func TestNew_RetriesWhenConfigured(t *testing.T) {
 	if calls != 2 {
 		t.Errorf("expected 2 calls (1 fail + 1 success), got %d", calls)
 	}
-}
-
-// envOrSkip is a small helper to skip tests when a required env var
-// is not set, used in tests that would otherwise fail loudly.
-func envOrSkip(t *testing.T, key string) string {
-	t.Helper()
-	v := os.Getenv(key)
-	if v == "" {
-		t.Skipf("env var %s not set; skipping", key)
-	}
-	return v
 }

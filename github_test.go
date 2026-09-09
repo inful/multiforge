@@ -67,27 +67,26 @@ func (f *fakeGitHubServer) serve(w http.ResponseWriter, r *http.Request) {
 	// baseURLs (treating them as Enterprise). For the test we
 	// pass the httptest server's URL as baseURL, so the real path
 	// has the prefix; strip it before matching.
-	path := r.URL.Path
-	path = strings.TrimPrefix(path, "/api/v3")
+	path := strings.TrimPrefix(r.URL.Path, "/api/v3")
 
-	switch {
-	case path == "/users/inful/repos":
+	switch path {
+	case "/users/inful/repos":
 		w.Header().Set("Content-Type", "application/json")
 		writeJSON(w, f.repos)
-	case path == "/orgs/inful/repos":
+	case "/orgs/inful/repos":
 		w.Header().Set("Content-Type", "application/json")
 		writeJSON(w, f.repos)
-	case path == "/repos/inful/dockdeps":
+	case "/repos/inful/dockdeps":
 		w.Header().Set("Content-Type", "application/json")
 		writeJSON(w, &f.repos[0])
-	case path == "/repos/inful/dockdeps/contents/Dockerfile":
+	case "/repos/inful/dockdeps/contents/Dockerfile":
 		if c, ok := f.contents["Dockerfile"]; ok {
 			w.Header().Set("Content-Type", "application/json")
 			writeJSON(w, &c)
 		} else {
 			http.Error(w, `{"message":"Not Found"}`, http.StatusNotFound)
 		}
-	case path == "/repos/inful/dockdeps/contents/":
+	case "/repos/inful/dockdeps/contents/":
 		// ListFiles on the root — return two entries.
 		w.Header().Set("Content-Type", "application/json")
 		writeJSON(w, []ghContents{
