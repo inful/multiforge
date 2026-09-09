@@ -198,7 +198,7 @@ func (c *glClient) ListUserRepos(ctx context.Context, user string) ([]Repository
 			url.PathEscape(user), perPage, page)
 		var projects []glProject
 		if err := c.do(ctx, http.MethodGet, path, nil, &projects); err != nil {
-			return nil, err
+			return nil, PublicOp("ListUserRepos", err)
 		}
 		if len(projects) == 0 {
 			break
@@ -230,7 +230,7 @@ func (c *glClient) ListOrgRepos(ctx context.Context, org string) ([]Repository, 
 			url.PathEscape(org), perPage, page)
 		var projects []glProject
 		if err := c.do(ctx, http.MethodGet, path, nil, &projects); err != nil {
-			return nil, err
+			return nil, PublicOp("ListOrgRepos", err)
 		}
 		if len(projects) == 0 {
 			break
@@ -252,7 +252,7 @@ func (c *glClient) GetRepository(ctx context.Context, owner, repo string) (*Repo
 	path := fmt.Sprintf("/projects/%s", url.PathEscape(projectPath))
 	var p glProject
 	if err := c.do(ctx, http.MethodGet, path, nil, &p); err != nil {
-		return nil, err
+		return nil, PublicOp("GetRepository", err)
 	}
 	out := c.convertRepo(&p)
 	return &out, nil
@@ -263,7 +263,7 @@ func (c *glClient) GetRepository(ctx context.Context, owner, repo string) (*Repo
 func (c *glClient) GetDefaultBranch(ctx context.Context, owner, repo string) (string, error) {
 	r, err := c.GetRepository(ctx, owner, repo)
 	if err != nil {
-		return "", err
+		return "", PublicOp("GetDefaultBranch", err)
 	}
 	if r.DefaultBranch == "" {
 		return "", NewError(KindConfig, "GetDefaultBranch", fmt.Errorf("repository %s/%s has no default branch", owner, repo))
@@ -288,7 +288,7 @@ func (c *glClient) GetFile(ctx context.Context, owner, repo, path, ref string) (
 		url.PathEscape(projectPath), url.PathEscape(path), url.QueryEscape(ref))
 	var f glFile
 	if err := c.do(ctx, http.MethodGet, apiPath, nil, &f); err != nil {
-		return nil, err
+		return nil, PublicOp("GetFile", err)
 	}
 	if f.Encoding != "base64" {
 		return nil, NewError(KindInternal, "GetFile", fmt.Errorf("unexpected content encoding %q (only base64 supported)", f.Encoding))
@@ -334,7 +334,7 @@ func (c *glClient) ListFiles(ctx context.Context, owner, repo, path, ref string)
 			url.PathEscape(projectPath), q.Encode())
 		var pageEntries []glTreeEntry
 		if err := c.do(ctx, http.MethodGet, pagedPath, nil, &pageEntries); err != nil {
-			return nil, err
+			return nil, PublicOp("ListFiles", err)
 		}
 		if len(pageEntries) == 0 {
 			break
@@ -368,20 +368,26 @@ func (c *glClient) ListFiles(ctx context.Context, owner, repo, path, ref string)
 }
 
 // isImmediateChild reports whether childPath is exactly one level
-// below prefixPath. For prefixPath="" it returns true for every
-// entry. For prefixPath="docs" it returns true for "docs/index.md"
-// but not "docs/sub/file.md".
+// below prefixPath. The caller is responsible for ensuring
+// prefixPath ends with "/" when non-empty (so "src" matches "src/"
+// and "srcfoo" doesn't).
+//
+// Examples (prefixPath → childPath → result):
+//
+//	""           → "Dockerfile"   → true   (top-level entry)
+//	""           → "src/foo.go"   → false  (nested under src, not root)
+//	"src/"       → "src/foo.go"   → true   (immediate child of src)
+//	"src/"       → "src/sub/bar"  → false  (one level too deep)
+//	"src/"       → "README.md"    → false  (not under src)
 func isImmediateChild(childPath, prefixPath string) bool {
-	if !strings.HasPrefix(childPath, prefixPath) {
+	if prefixPath != "" && !strings.HasPrefix(childPath, prefixPath) {
 		return false
 	}
 	rest := strings.TrimPrefix(childPath, prefixPath)
-	// No slash → file at prefixPath itself; not a child.
-	idx := strings.Index(rest, "/")
-	if idx < 0 {
-		return false
-	}
-	// If there's a slash after the prefix, the rest must be exactly
-	// "<name>" (no further slashes) for it to be an immediate child.
-	return !strings.Contains(rest[idx+1:], "/")
+	// "Immediate child" means exactly one level below the prefix,
+	// which is equivalent to "the path after stripping the prefix
+	// contains no slash". With prefixPath="" and childPath="Dockerfile"
+	// that's "Dockerfile" (no slash → true). With childPath="src/foo.go"
+	// and prefixPath="" that's "src/foo.go" (slash present → false).
+	return !strings.Contains(rest, "/")
 }

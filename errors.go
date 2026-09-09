@@ -149,6 +149,36 @@ func As(err error) *Error {
 	return nil
 }
 
+// PublicOp wraps err so the returned error's Op field carries the
+// public method name (e.g., "GetFile") instead of whatever HTTP
+// method+path do() set internally. The Kind, StatusCode, RetryAfter,
+// Hint, and underlying cause are preserved; only the Op changes.
+//
+// Callers should use this in every public Client method that
+// delegates to do() so log lines and error messages read as
+// "GetFile: not found" rather than "GET /repos/.../contents/...".
+//
+// If err is nil, PublicOp returns nil. If err is not a *Error
+// (e.g., a context.Canceled from upstream), it is returned
+// unchanged.
+func PublicOp(op string, err error) error {
+	if err == nil {
+		return nil
+	}
+	mfErr := As(err)
+	if mfErr == nil {
+		return err
+	}
+	return &Error{
+		Kind:       mfErr.Kind,
+		Op:         op,
+		Err:        mfErr.Err,
+		StatusCode: mfErr.StatusCode,
+		RetryAfter: mfErr.RetryAfter,
+		Hint:       mfErr.Hint,
+	}
+}
+
 // MaxRetryAfter caps server-supplied Retry-After values at a value
 // reasonable for a CLI tool's wall-clock budget. A misbehaving server
 // that asks us to wait hours is treated as MaxRetryAfter (the upper

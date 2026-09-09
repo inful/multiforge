@@ -226,7 +226,7 @@ func (c *ghClient) ListUserRepos(ctx context.Context, user string) ([]Repository
 			url.PathEscape(user), page, perPage)
 		var repos []ghRepo
 		if err := c.do(ctx, http.MethodGet, path, nil, &repos); err != nil {
-			return nil, err
+			return nil, PublicOp("ListUserRepos", err)
 		}
 		if len(repos) == 0 {
 			break
@@ -252,7 +252,7 @@ func (c *ghClient) ListOrgRepos(ctx context.Context, org string) ([]Repository, 
 			url.PathEscape(org), page, perPage)
 		var repos []ghRepo
 		if err := c.do(ctx, http.MethodGet, path, nil, &repos); err != nil {
-			return nil, err
+			return nil, PublicOp("ListOrgRepos", err)
 		}
 		if len(repos) == 0 {
 			break
@@ -273,7 +273,7 @@ func (c *ghClient) GetRepository(ctx context.Context, owner, repo string) (*Repo
 	path := fmt.Sprintf("/repos/%s/%s", url.PathEscape(owner), url.PathEscape(repo))
 	var r ghRepo
 	if err := c.do(ctx, http.MethodGet, path, nil, &r); err != nil {
-		return nil, err
+		return nil, PublicOp("GetRepository", err)
 	}
 	out := c.convertRepo(&r)
 	return &out, nil
@@ -286,7 +286,7 @@ func (c *ghClient) GetRepository(ctx context.Context, owner, repo string) (*Repo
 func (c *ghClient) GetDefaultBranch(ctx context.Context, owner, repo string) (string, error) {
 	r, err := c.GetRepository(ctx, owner, repo)
 	if err != nil {
-		return "", err
+		return "", PublicOp("GetDefaultBranch", err)
 	}
 	if r.DefaultBranch == "" {
 		return "", NewError(KindConfig, "GetDefaultBranch", fmt.Errorf("repository %s/%s has no default branch", owner, repo))
@@ -314,7 +314,7 @@ func (c *ghClient) GetFile(ctx context.Context, owner, repo, path, ref string) (
 		url.PathEscape(owner), url.PathEscape(repo), path, url.QueryEscape(ref))
 	var r ghContents
 	if err := c.do(ctx, http.MethodGet, apiPath, nil, &r); err != nil {
-		return nil, err
+		return nil, PublicOp("GetFile", err)
 	}
 	if r.Content == "" {
 		// Empty file: return zero-length slice without trying to
@@ -338,7 +338,7 @@ func (c *ghClient) ListFiles(ctx context.Context, owner, repo, path, ref string)
 		url.PathEscape(owner), url.PathEscape(repo), path, url.QueryEscape(ref))
 	var entries []ghContents
 	if err := c.do(ctx, http.MethodGet, apiPath, nil, &entries); err != nil {
-		return nil, err
+		return nil, PublicOp("ListFiles", err)
 	}
 	// GitHub's contents API returns a single object (not array) when
 	// path refers to a file. To normalise that, decode the response
@@ -346,7 +346,7 @@ func (c *ghClient) ListFiles(ctx context.Context, owner, repo, path, ref string)
 	if len(entries) == 0 {
 		var single ghContents
 		if err := c.do(ctx, http.MethodGet, apiPath, nil, &single); err != nil {
-			return nil, err
+			return nil, PublicOp("ListFiles", err)
 		}
 		if single.Path == "" {
 			return nil, NewError(KindNotFound, "ListFiles", fmt.Errorf("path %q not found in %s/%s", path, owner, repo))

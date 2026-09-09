@@ -183,7 +183,7 @@ func (c *forgejoClient) ListUserRepos(ctx context.Context, user string) ([]Repos
 		path := fmt.Sprintf("/api/v1/users/%s/repos?page=%d&limit=%d", url.PathEscape(user), page, limit)
 		var repos []forgejoRepo
 		if err := c.do(ctx, http.MethodGet, path, nil, &repos); err != nil {
-			return nil, err
+			return nil, PublicOp("ListUserRepos", err)
 		}
 		if len(repos) == 0 {
 			break
@@ -208,7 +208,7 @@ func (c *forgejoClient) ListOrgRepos(ctx context.Context, org string) ([]Reposit
 		path := fmt.Sprintf("/api/v1/orgs/%s/repos?page=%d&limit=%d", url.PathEscape(org), page, limit)
 		var repos []forgejoRepo
 		if err := c.do(ctx, http.MethodGet, path, nil, &repos); err != nil {
-			return nil, err
+			return nil, PublicOp("ListOrgRepos", err)
 		}
 		if len(repos) == 0 {
 			break
@@ -229,7 +229,7 @@ func (c *forgejoClient) GetRepository(ctx context.Context, owner, repo string) (
 	path := fmt.Sprintf("/api/v1/repos/%s/%s", url.PathEscape(owner), url.PathEscape(repo))
 	var r forgejoRepo
 	if err := c.do(ctx, http.MethodGet, path, nil, &r); err != nil {
-		return nil, err
+		return nil, PublicOp("GetRepository", err)
 	}
 	out := c.convertRepo(&r)
 	return &out, nil
@@ -242,7 +242,7 @@ func (c *forgejoClient) GetRepository(ctx context.Context, owner, repo string) (
 func (c *forgejoClient) GetDefaultBranch(ctx context.Context, owner, repo string) (string, error) {
 	r, err := c.GetRepository(ctx, owner, repo)
 	if err != nil {
-		return "", err
+		return "", PublicOp("GetDefaultBranch", err)
 	}
 	if r.DefaultBranch == "" {
 		return "", NewError(KindConfig, "GetDefaultBranch", fmt.Errorf("repository %s/%s has no default branch", owner, repo))
@@ -261,7 +261,7 @@ func (c *forgejoClient) GetFile(ctx context.Context, owner, repo, path, ref stri
 		Encoding string `json:"encoding"`
 	}
 	if err := c.do(ctx, http.MethodGet, apiPath, nil, &r); err != nil {
-		return nil, err
+		return nil, PublicOp("GetFile", err)
 	}
 	if r.Encoding != "base64" {
 		return nil, NewError(KindInternal, "GetFile", fmt.Errorf("unexpected content encoding %q (only base64 supported)", r.Encoding))
@@ -291,7 +291,7 @@ func (c *forgejoClient) ListFiles(ctx context.Context, owner, repo, path, ref st
 		url.PathEscape(owner), url.PathEscape(repo), path, url.QueryEscape(ref))
 	var entries []forgejoContent
 	if err := c.do(ctx, http.MethodGet, apiPath, nil, &entries); err != nil {
-		return nil, err
+		return nil, PublicOp("ListFiles", err)
 	}
 	out := make([]FileInfo, 0, len(entries))
 	for _, e := range entries {
