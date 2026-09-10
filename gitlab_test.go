@@ -95,6 +95,76 @@ func TestGitLabClient_ListUserRepos(t *testing.T) {
 	}
 }
 
+// TestGitLabClient_ListUserRepos_NonExistentUser reproduces the
+// regression reported in dockdeps issue #1. Some self-hosted GitLab
+// instances return `{}` (an empty JSON object) with a 200 status when
+// the requested user has no projects visible to the API token, even
+// though the user exists. Decoding that into []glProject fails with
+// "cannot unmarshal object into Go value of type []glProject".
+//
+// The fix should treat an empty-object 200 response as "no projects"
+// and return an empty slice instead of bubbling up a JSON decode
+// error.
+func TestGitLabClient_ListUserRepos_NonExistentUser(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/api/v4/users/testuser/projects"):
+			w.Header().Set("Content-Type", "application/json")
+			// Simulate GitLab returning an empty object on a 200
+			// when the user exists but the token can't see any
+			// projects.
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{}`))
+		default:
+			http.Error(w, `{"message":"unhandled"}`, http.StatusNotFound)
+		}
+	}))
+	defer ts.Close()
+
+	c, err := newGitLab(ts.URL+"/api/v4", "token", ts.Client(), "test")
+	if err != nil {
+		t.Fatalf("newGitLab: %v", err)
+	}
+
+	repos, err := c.ListUserRepos(context.Background(), "testuser")
+	if err != nil {
+		t.Fatalf("ListUserRepos: want nil error for empty-object response, got %v", err)
+	}
+	if len(repos) != 0 {
+		t.Errorf("repos = %d, want 0", len(repos))
+	}
+}
+
+// TestGitLabClient_ListOrgRepos_NonExistentGroup covers the same
+// regression for ListOrgRepos: GitLab can return `{}` for a group
+// the token can't see.
+func TestGitLabClient_ListOrgRepos_NonExistentGroup(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/api/v4/groups/testgroup/projects"):
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{}`))
+		default:
+			http.Error(w, `{"message":"unhandled"}`, http.StatusNotFound)
+		}
+	}))
+	defer ts.Close()
+
+	c, err := newGitLab(ts.URL+"/api/v4", "token", ts.Client(), "test")
+	if err != nil {
+		t.Fatalf("newGitLab: %v", err)
+	}
+
+	repos, err := c.ListOrgRepos(context.Background(), "testgroup")
+	if err != nil {
+		t.Fatalf("ListOrgRepos: want nil error for empty-object response, got %v", err)
+	}
+	if len(repos) != 0 {
+		t.Errorf("repos = %d, want 0", len(repos))
+	}
+}
+
 func TestGitLabClient_GetFile(t *testing.T) {
 	f := newFakeGitLab(t)
 	defer f.Close()

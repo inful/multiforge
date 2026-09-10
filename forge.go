@@ -9,10 +9,14 @@
 package multiforge
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
+	"reflect"
 	"time"
 
 	"github.com/inful/multiforge/internal/httpclient"
@@ -180,4 +184,73 @@ func New(ctx context.Context, cfg Config) (Client, error) {
 		c = WithRetry(c, cfg.Retry)
 	}
 	return c, nil
+}
+
+// decodeResponse decodes body into v with a single quirk: when v is a
+// pointer to a slice and body parses as a JSON object (or is empty,
+// or is `null`), the slice is left as nil instead of returning
+// "cannot unmarshal object into ...".
+//
+// GitLab emits `{}` with a 200 status on some endpoints when the
+// requested entity exists but the API token can't see any of its
+// child resources — e.g. /users/{user}/projects when the user has no
+// projects visible to the token. That's semantically "no projects",
+// not "decode error", and the upstream caller treats a nil slice as
+// "empty result" naturally.
+//
+// Real decode failures — body into struct, object into *Repository,
+// etc. — still surface because we only relax the rule for slice
+// targets fed a non-array body.
+func decodeResponse(body io.Reader, v any) error {
+	if v == nil {
+		_, err := io.Copy(io.Discard, body)
+		return err
+	}
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return err
+	}
+	if sliceTargetMismatch(data, v) {
+		return nil
+	}
+	return json.Unmarshal(data, v)
+}
+
+// isSlicePtr reports whether v's dynamic type is a pointer to a slice.
+// Used by decodeResponse to relax the JSON unmarshal step for the
+// GitLab quirk where some endpoints return `{}` with a 200 when they
+// should return a JSON array.
+//
+// The reflect.Kind() calls below intentionally defeat govet's
+// "inlinable reflect" check — we genuinely need the runtime kind
+// because the call sites pass a heterogeneous mix of *[]T types.
+//nolint:govet
+func isSlicePtr(v any) bool {
+	if v == nil {
+		return false
+	}
+	rv := reflect.ValueOf(v)
+	return rv.IsValid() && rv.Kind() == reflect.Ptr && rv.Elem().Kind() == reflect.Slice
+}
+
+// sliceTargetMismatch reports whether `data` is a JSON document that
+// cannot match a slice target (and therefore should be treated as
+// "empty"). Returns true for empty bodies, the literal `null`, or any
+// JSON object — only JSON arrays can satisfy a `*[]T` target.
+func sliceTargetMismatch(data []byte, v any) bool {
+	if !isSlicePtr(v) {
+		return false
+	}
+	trimmed := bytes.TrimLeft(data, " \t\r\n")
+	if len(trimmed) == 0 {
+		return true // empty body
+	}
+	switch trimmed[0] {
+	case '[':
+		return false // proper array — let the normal decoder run
+	case 'n':
+		return len(trimmed) >= 4 && bytes.Equal(trimmed[:4], []byte("null"))
+	default:
+		return true // object, primitive, or anything non-array
+	}
 }

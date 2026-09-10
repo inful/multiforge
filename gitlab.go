@@ -102,7 +102,7 @@ func (c *glClient) do(ctx context.Context, method, path string, body, v any) err
 		if v == nil {
 			return nil
 		}
-		if err := json.NewDecoder(resp.Body).Decode(v); err != nil {
+		if err := decodeResponse(resp.Body, v); err != nil {
 			return NewError(KindInternal, method+" "+path, fmt.Errorf("decode: %w", err))
 		}
 		return nil
